@@ -25,21 +25,24 @@
  ***************************************************************************/
 
 import QtQuick 2.12
+import QtQuick.Controls.Material 2.0
 import Fluid.Controls 1.0 as FluidControls
 import Fluid.Effects 1.0 as FluidEffects
 
 HardwareLayerSurfaceItem {
     id: osd
 
-    layer.enabled: true
-    layer.effect: FluidEffects.Elevation {
-        elevation: 8
-    }
+    Material.elevation: 8
 
     stackingLevel: 0
 
     opacity: 0.0
     visible: opacity > 0.0
+
+    onSurfaceDestroyed: {
+        bufferLocked = true;
+        destroy();
+    }
 
     OpacityAnimator {
         id: showAnimation

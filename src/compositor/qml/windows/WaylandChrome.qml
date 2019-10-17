@@ -32,8 +32,6 @@ P.ChromeItem {
 
     property QtObject window
 
-    property rect taskIconGeometry: Qt.rect(0, 0, 32, 32)
-
     x: chrome.window.moveItem.x - shellSurfaceItem.output.position.x
     y: chrome.window.moveItem.y - shellSurfaceItem.output.position.y
 
@@ -155,7 +153,7 @@ P.ChromeItem {
         shellSurface: chrome.window.shellSurface
         moveItem: chrome.window.moveItem
 
-        inputEventsEnabled: !output.screenView.locked
+        inputEventsEnabled: !output.locked
 
         focusOnClick: chrome.window.focusable
 
@@ -235,9 +233,18 @@ P.ChromeItem {
 
         ScriptAction {
             script: {
-                __private.moveItemPosition.x = shellSurfaceItem.moveItem.x;
-                __private.moveItemPosition.y = shellSurfaceItem.moveItem.y;
-                moveItem.animateTo(taskIconGeometry.x, taskIconGeometry.y);
+                var taskBarItem = shellSurfaceItem.output.viewsBySurface[chrome.window.taskBarSurface];
+                if (taskBarItem) {
+                    // Save previous coordinates
+                    __private.moveItemPosition.x = chrome.window.moveItem.x;
+                    __private.moveItemPosition.y = chrome.window.moveItem.y;
+
+                    // Move to the task bar item
+                    var x = chrome.window.taskBarEntryGeometry.x - (chrome.implicitWidth / 2);
+                    var y = chrome.window.taskBarEntryGeometry.y - (chrome.implicitHeight / 2);
+                    var coords = taskBarItem.mapToItem(taskBarItem.parent, x, y);
+                    chrome.window.moveItem.animateTo(coords.x, coords.y);
+                }
             }
         }
 
@@ -254,7 +261,7 @@ P.ChromeItem {
 
         ScriptAction {
             script: {
-                moveItem.animateTo(__private.moveItemPosition.x, __private.moveItemPosition.y);
+                chrome.window.moveItem.animateTo(__private.moveItemPosition.x, __private.moveItemPosition.y);
             }
         }
 

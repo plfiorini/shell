@@ -26,14 +26,13 @@ import QtQml 2.1
 import QtQuick 2.5
 import QtQuick.Window 2.2
 import QtWayland.Compositor 1.3
-import Liri.Launcher 1.0 as Launcher
-import Liri.PolicyKit 1.0
 import Liri.WaylandServer 1.0 as WS
+import Liri.Session 1.0 as Session
 import Liri.Shell 1.0 as LS
-import Liri.WaylandServer 1.0 as WS
 import Liri.private.shell 1.0 as P
 import "base"
-import "components"
+import "components" as Components
+import "components/LayerSurfaceManager.js" as LayerSurfaceManager
 import "desktop"
 import "windows"
 
@@ -53,9 +52,7 @@ WaylandCompositor {
     readonly property bool hasMaxmizedShellSurfaces: __private.maximizedShellSurfaces > 0
     readonly property bool hasFullscreenShellSurfaces: __private.fullscreenShellSurfaces > 0
 
-    readonly property alias applicationManager: applicationManager
     readonly property alias shellHelper: shellHelper
-    readonly property alias policyKitAgent: policyKitAgent
 
     signal shellSurfaceCreated(var shellSurface)
     signal shellSurfaceDestroyed(var shellSurface)
@@ -72,11 +69,12 @@ WaylandCompositor {
         if (liriCompositor.created) {
             console.debug("Compositor created");
 
-            SessionInterface.setEnvironment("WAYLAND_DISPLAY", liriCompositor.socketName);
-            SessionInterface.registerService();
+            Session.SessionManager.setEnvironment("WAYLAND_DISPLAY", liriCompositor.socketName);
 
             if (xwaylandLoader.status == Loader.Ready)
                 xwaylandLoader.item.startServer();
+
+            ShellCpp.registerService();
         }
     }
 
@@ -237,7 +235,7 @@ WaylandCompositor {
 
     QtWindowManager {
         showIsFullScreen: false
-        onOpenUrl: SessionInterface.launchCommand("xdg-open %1".arg(url))
+        onOpenUrl: LS.Launcher.launchCommand("xdg-open %1".arg(url))
     }
 
     // Liri shell
@@ -245,27 +243,22 @@ WaylandCompositor {
     WS.LiriShell {
         id: shellHelper
 
+        property bool isReady: false
         property WaylandSurface grabSurface: null
 
         onGrabSurfaceAdded: {
             grabSurface = surface;
         }
-        onReady: {
-            shellHelperTimer.running = false;
-
-            for (var i = 0; i < screenManager.count; i++)
-                screenManager.objectAt(i).screenView.state = "session";
+        onShortcutBound: {
+            shortcutComponent.incubateObject(keyBindings, { shortcut: shortcut });
         }
-    }
-
-    Timer {
-        id: shellHelperTimer
-
-        interval: 15000
-        running: true
-        onTriggered: {
+        onReady: {
+            isReady = true;
             for (var i = 0; i < screenManager.count; i++)
-                screenManager.objectAt(i).screenView.state = "session";
+                screenManager.objectAt(i).splash.hide();
+        }
+        onTerminateRequested: {
+            liriCompositor.quit();
         }
     }
 
@@ -273,26 +266,67 @@ WaylandCompositor {
         id: liriOsd
     }
 
+    Component {
+        id: shortcutComponent
+
+        Shortcut {
+            property WS.LiriShortcut shortcut: null
+
+            context: Qt.ApplicationShortcut
+            sequence: shortcut ? shortcut.sequence : ""
+            enabled: shellHelper.isReady
+            onActivated: {
+                shortcut.activate();
+            }
+        }
+    }
+
     // Layer shell
 
     Component {
         id: layerItemComponent
 
-        LayerSurfaceItem {}
+        Components.LayerSurfaceItem {
+            onSurfaceDestroyed: {
+                bufferLocked = true;
+                destroy();
+            }
+        }
     }
 
     Component {
-        id: bgLayerItemComponent
+        id: modalComponent
 
-        HardwareLayerSurfaceItem {
-            stackingLevel: -1
+        Components.HardwareLayerSurfaceItem {
+            Keys.onEscapePressed: {
+                // For some reason the client can't handle ESC so we
+                // do it from the compositor
+                layerSurface.close();
+            }
+
+            onSurfaceDestroyed: {
+                bufferLocked = true;
+                destroy();
+            }
         }
+    }
+
+    Component {
+        id: lockScreenComponent
+
+        Components.LockScreen {}
     }
 
     Component {
         id: osdComponent
 
-        Osd {}
+        Components.Osd {}
+    }
+
+    Component {
+        id: notificationComponent
+
+        Components.Notification {}
     }
 
     WS.WlrLayerShellV1 {
@@ -300,45 +334,60 @@ WaylandCompositor {
 
         onLayerSurfaceCreated: {
             // Create an item for the specified output, if none is specified create
-            // an item for each output
-            if (layerSurface.output) {
-                createItem(layerSurface, layerSurface.output);
+            // an item in the default output for modal dialogs, or an item for each
+            // output for the other kind of layer surfaces
+            var output = layerSurface.nameSpace === "modal"
+                    ? liriCompositor.defaultOutput
+                    : layerSurface.output;
+            if (output) {
+                createItem(layerSurface, output);
             } else {
-                for (var i = 0; i < screenManager.count; i++)
-                    createItem(layerSurface, screenManager.objectAt(i));
+                for (var i = 0; i < screenManager.count; i++) {
+                    output = screenManager.objectAt(i);
+                    createItem(layerSurface, output);
+                }
             }
         }
 
         function createItem(layerSurface, output) {
-            var parent = null;
-            switch (layerSurface.layer) {
-            case WS.WlrLayerShellV1.BackgroundLayer:
-                parent = output.screenView.desktop.layers.background;
-                break;
-            case WS.WlrLayerShellV1.BottomLayer:
-                parent = output.screenView.desktop.layers.bottom;
-                break;
-            case WS.WlrLayerShellV1.TopLayer:
-                parent = output.screenView.desktop.layers.top;
-                break;
-            case WS.WlrLayerShellV1.OverlayLayer:
-                parent = output.screenView.desktop.layers.overlay;
-                break;
-            default:
-                break;
-            }
+            var parent = LayerSurfaceManager.getParentForLayer(layerSurface, output);
 
+            // Create item
+            var item;
             var props = {
                 "layerSurface": layerSurface,
                 "surface": layerSurface.surface,
-                "output": output
+                "output": output,
+                "z": LayerSurfaceManager.getLayerPriority(layerSurface),
             };
-            if (layerSurface.nameSpace === "background")
-                bgLayerItemComponent.createObject(parent, props);
-            else if (layerSurface.nameSpace === "osd")
-                osdComponent.createObject(parent, props);
-            else
-                layerItemComponent.createObject(parent, props);
+            if (layerSurface.nameSpace === "osd") {
+                item = osdComponent.createObject(parent, props);
+            } else if (layerSurface.nameSpace === "notification") {
+                item = notificationComponent.createObject(parent, props)
+            } else if (layerSurface.nameSpace === "lockscreen") {
+                item = lockScreenComponent.createObject(parent, props);;
+            } else if (layerSurface.nameSpace === "modal" ||
+                       layerSurface.nameSpace === "modal-overlay") {
+                item = modalComponent.createObject(parent, props);
+            } else {
+                item = layerItemComponent.createObject(parent, props);
+            }
+
+            // Calculate the geometry available to windows
+            if (layerSurface.nameSpace === "panel") {
+                layerSurface.configuredChanged.connect(function() {
+                    output.availableGeometry.x = 0;
+                    output.availableGeometry.y = 0;
+                    output.availableGeometry.width = output.geometry.width;
+                    output.availableGeometry.height =
+                            output.geometry.height - layerSurface.height -
+                            layerSurface.topMargin - layerSurface.bottomMargin;
+                });
+            }
+
+            output.viewsBySurface[layerSurface.surface] = item;
+
+            return item;
         }
     }
 
@@ -431,14 +480,14 @@ WaylandCompositor {
     WS.WlrScreencopyManagerV1 {
         onCaptureOutputRequested: {
             frame.ready.connect(function() {
-                frame.copy("screenView");
+                frame.copy("desktop");
                 liriCompositor.flash();
             });
         }
     }
 
     WS.LiriColorPickerManager {
-        layerName: "screenView"
+        layerName: "desktop"
     }
 
     // Shells
@@ -594,16 +643,6 @@ WaylandCompositor {
         id: rootItem
     }
 
-    Launcher.ApplicationManager {
-        id: applicationManager
-        onShellSurfaceFocused: activeShellSurface = shellSurface
-    }
-
-    Launcher.LauncherModel {
-        id: launcherModel
-        sourceModel: applicationManager
-    }
-
     LS.DateTime {
         id: dateTime
     }
@@ -612,36 +651,8 @@ WaylandCompositor {
         id: settings
     }
 
-    KeyBindings {}
-
-    // PolicyKit
-    PolicyKitAgent {
-        id: policyKitAgent
-        onAuthenticationInitiated: {
-            var authDialog = liriCompositor.defaultOutput.screenView.authDialog;
-            authDialog.actionId = actionId;
-            authDialog.message = message;
-            authDialog.iconName = iconName;
-            authDialog.realName = realName;
-        }
-        onAuthenticationRequested: {
-            var authDialog = liriCompositor.defaultOutput.screenView.authDialog;
-            authDialog.prompt = prompt;
-            authDialog.echo = echo;
-            authDialog.open();
-        }
-        onAuthenticationCanceled: liriCompositor.defaultOutput.screenView.authDialog.close()
-        onAuthenticationFinished: liriCompositor.defaultOutput.screenView.authDialog.close()
-        onAuthorizationGained: liriCompositor.defaultOutput.screenView.authDialog.close()
-        onAuthorizationFailed: {
-            var authDialog = liriCompositor.defaultOutput.screenView.authDialog;
-            authDialog.errorMessage = qsTr("Sorry, that didn't work. Please try again.");
-        }
-        onAuthorizationCanceled: liriCompositor.defaultOutput.screenView.authDialog.close()
-        onInformation: liriCompositor.defaultOutput.screenView.authDialog.infoMessage = message
-        onError: liriCompositor.defaultOutput.screenView.authDialog.errorMessage = message
-
-        Component.onCompleted: registerAgent()
+    KeyBindings {
+        id: keyBindings
     }
 
     Timer {
@@ -659,7 +670,7 @@ WaylandCompositor {
                 }
             }
 
-            SessionInterface.idle = idleHint;
+            Session.SessionManager.idle = idleHint;
         }
     }
 
@@ -674,7 +685,7 @@ WaylandCompositor {
             screenManager.objectAt(i).wake();
         }
 
-        SessionInterface.idle = false;
+        Session.SessionManager.idle = false;
     }
 
     function idle() {
@@ -682,7 +693,7 @@ WaylandCompositor {
         for (i = 0; i < screenManager.count; i++)
             screenManager.objectAt(i).idle();
 
-        SessionInterface.idle = true;
+        Session.SessionManager.idle = true;
     }
 
     function flash() {
@@ -722,8 +733,6 @@ WaylandCompositor {
                 break;
             }
         }
-
-        applicationManager.unregisterShellSurface(window);
 
         liriCompositor.shellSurfaceDestroyed(window);
 

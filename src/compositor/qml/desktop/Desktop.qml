@@ -33,8 +33,6 @@ import Liri.WaylandServer 1.0 as WS
 import Liri.Shell 1.0 as LS
 import ".."
 import "../components"
-import "../indicators"
-import "../notifications"
 
 Item {
     id: desktop
@@ -45,25 +43,14 @@ Item {
 
     // Margins for "present" mode to fit screen aspect ratio
     property QtObject margins: QtObject {
-        property real left: screenView.width * 0.1
-        property real right: screenView.width * 0.1
-        property real top: screenView.height * 0.1
-        property real bottom: screenView.height * 0.1
+        property real left: desktop.width * 0.1
+        property real right: desktop.width * 0.1
+        property real top: desktop.height * 0.1
+        property real bottom: desktop.height * 0.1
     }
 
-    readonly property var layers: QtObject {
-        readonly property alias background: backgroundLayer
-        readonly property alias desktop: desktopLayer
-        readonly property alias bottom: bottomLayer
-        readonly property alias top: topLayer
-        readonly property alias fullScreen: fullScreenLayer
-        readonly property alias overlay: overlayLayer
-        readonly property alias notifications: notificationsLayer
-    }
-
-    readonly property alias shell: shellLoader.item
+    readonly property alias backgroundLayer: backgroundLayer
     readonly property alias currentWorkspace: workspacesView.currentWorkspace
-    readonly property var panel: shell ? shell.panel : null
     readonly property alias windowSwitcher: windowSwitcher
 
     // All the necessary for the "present" mode
@@ -106,16 +93,24 @@ Item {
                     easing.type: Easing.OutQuad
                     duration: 300
                 }
-
-                ScriptAction { script: desktop.layer.enabled = false }
+                ScriptAction {
+                    script: {
+                        desktop.layer.enabled = false;
+                        output.layers.top.visible = true;
+                    }
+                }
             }
         },
         Transition {
             to: "present"
 
             SequentialAnimation {
-                ScriptAction { script: desktop.layer.enabled = true }
-
+                ScriptAction {
+                    script: {
+                        desktop.layer.enabled = true;
+                        output.layers.top.visible = false;
+                    }
+                }
                 NumberAnimation {
                     properties: "anchors.leftMargin,anchors.rightMargin,anchors.topMargin,anchors.bottomMargin"
                     easing.type: Easing.InQuad
@@ -131,78 +126,12 @@ Item {
 
     Item {
         id: backgroundLayer
-        anchors.fill: parent
-    }
 
-    Item {
-        id: desktopLayer
-        anchors.fill: parent
-    }
-
-    Item {
-        id: bottomLayer
         anchors.fill: parent
     }
 
     WorkspacesView {
         id: workspacesView
-    }
-
-    Item {
-        id: topLayer
-        anchors.fill: parent
-    }
-
-    Loader {
-        id: notificationsLayer
-        anchors {
-            top: parent.top
-            right: parent.right
-            bottom: parent.bottom
-            topMargin: FluidControls.Units.largeSpacing * 3
-            bottomMargin: 56 + FluidControls.Units.smallSpacing
-        }
-        active: output.primary
-        sourceComponent: Notifications {}
-        width: FluidControls.Units.gu(24) + (2 * FluidControls.Units.smallSpacing)
-    }
-
-    // Panels
-    Loader {
-        id: shellLoader
-        anchors.fill: parent
-        active: output.primary
-        sourceComponent: Shell {
-            opacity: currentWorkspace.state == "present" ? 0.0 : 1.0
-            visible: opacity > 0.0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    easing.type: Easing.OutQuad
-                    duration: 250
-                }
-            }
-        }
-    }
-
-    // Full screen windows can cover application windows and panels
-    Rectangle {
-        id: fullScreenLayer
-        anchors.fill: parent
-        color: "black"
-        opacity: children.length > 0 ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation {
-                easing.type: Easing.InSine
-                duration: FluidControls.Units.mediumDuration
-            }
-        }
-    }
-
-    Item {
-        id: overlayLayer
-        anchors.fill: parent
     }
 
     // Windows switcher
@@ -226,5 +155,42 @@ Item {
 
     function selectWorkspace(num) {
         workspacesView.select(num);
+    }
+
+    function handleKeyPressed(event) {
+        // Handle Meta modifier
+        if (event.modifiers & Qt.MetaModifier) {
+            // Open window switcher
+            if (output.primary) {
+                if (event.key === Qt.Key_Tab) {
+                    event.accepted = true;
+                    desktop.windowSwitcher.next();
+                    return;
+                } else if (event.key === Qt.Key_Backtab) {
+                    event.accepted = true;
+                    desktop.windowSwitcher.previous();
+                    return;
+                }
+            }
+        }
+
+        event.accepted = false;
+    }
+
+    function handleKeyReleased(event) {
+        // Handle Meta modifier
+        if (event.modifiers & Qt.MetaModifier) {
+            // Close window switcher
+            if (output.primary) {
+                if (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R) {
+                    event.accepted = true;
+                    desktop.windowSwitcher.close();
+                    desktop.windowSwitcher.activate();
+                    return;
+                }
+            }
+        }
+
+        event.accepted = false;
     }
 }

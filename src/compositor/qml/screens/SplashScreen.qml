@@ -24,11 +24,13 @@
  * $END_LICENSE$
  ***************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.10
 import QtQuick.Controls 2.0
 import QtQuick.Controls.Material 2.0
 
 Rectangle {
+    id: splash
+
     // Same color as Plymouth and SDDM
     color: Material.color(Material.BlueGrey, Material.Shade800)
 
@@ -38,5 +40,34 @@ Rectangle {
 
     BusyIndicator {
         anchors.centerIn: parent
+    }
+
+    OpacityAnimator {
+        id: showAnimation
+
+        alwaysRunToEnd: true
+        target: splash
+        from: 0.0
+        to: 1.0
+        duration: 250
+    }
+
+    OpacityAnimator {
+        id: hideAnimation
+
+        alwaysRunToEnd: true
+        target: splash
+        from: 1.0
+        to: 0.0
+        duration: 250
+    }
+
+    function show() {
+        showAnimation.start();
+    }
+
+    function hide() {
+        if (opacity > 0.0)
+            hideAnimation.start();
     }
 }

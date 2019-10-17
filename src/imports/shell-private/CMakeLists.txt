@@ -28,8 +28,6 @@ liri_add_qml_plugin(shell-private
         fpscounter.h
         hotspot.cpp
         hotspot.h
-        indicatorsmodel.cpp
-        indicatorsmodel.h
         inputsettings.cpp
         inputsettings.h
         keyeventfilter.cpp

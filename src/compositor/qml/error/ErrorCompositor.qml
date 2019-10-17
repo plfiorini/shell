@@ -25,6 +25,7 @@ import QtQml 2.2
 import QtQuick 2.5
 import QtQuick.Window 2.0
 import QtWayland.Compositor 1.0
+import Liri.Session 1.0 as Session
 import Liri.WaylandServer 1.0 as WS
 import Liri.private.shell 1.0 as P
 import ".." as Root
@@ -32,12 +33,13 @@ import ".." as Root
 WaylandCompositor {
     id: liriCompositor
 
+    signal startedUp()
+
     onCreatedChanged: {
         if (liriCompositor.created) {
             console.debug("Compositor created");
-
-            SessionInterface.setEnvironment("WAYLAND_DISPLAY", liriCompositor.socketName);
-            SessionInterface.registerService();
+            Session.SessionManager.setEnvironment("WAYLAND_DISPLAY", liriCompositor.socketName);
+            startedUp();
         }
     }
 

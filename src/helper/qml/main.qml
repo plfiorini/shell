@@ -22,20 +22,90 @@
  ***************************************************************************/
 
 import QtQml 2.1
-import QtQuick 2.0
+import QtQuick 2.10
 import QtQuick.Window 2.9
+import QtGSettings 1.0 as Settings
+import Liri.Session 1.0 as Session
 import Liri.WaylandClient 1.0 as WaylandClient
+import Liri.TaskManager 1.0 as TaskManager
+import Liri.PolicyKit 1.0 as PolicyKit
+import "components" as Components
+import "dialogs" as Dialogs
+import "ui/launcher" as Launcher
+import "ui/notifications" as Notifications
 
 Item {
+    id: main
+
+    property Screen primaryScreen: null
     property int refCount: 0
 
-    onRefCountChanged: {
-        if (shell.active && refCount == 0)
-            shell.sendReady();
+    /*
+     * Primary screen
+     */
+
+    Settings.GSettings {
+        id: screenSettings
+
+        schema.id: "io.liri.hardware.screens"
+        schema.path: "/io/liri/hardware/screens/"
+    }
+
+    Connections {
+        target: screenSettings
+
+        function onPrimaryChanged() {
+            primaryScreen = determinePrimaryScreen();
+        }
+    }
+
+    Component.onCompleted: {
+        primaryScreen = determinePrimaryScreen();
+    }
+
+    /*
+     * Key bindings
+     */
+
+    KeyBindings {}
+
+    /*
+     * Session
+     */
+
+    Connections {
+        target: Session.SessionManager
+
+        function onSessionLocked() {
+            indicatorsWindow.contentItem.enabled = false;
+            lockScreen.open();
+        }
+
+        function onSessionUnlocked() {
+            indicatorsWindow.contentItem.enabled = true;
+            lockScreen.close();
+        }
+    }
+
+    /*
+     * Shell
+     */
+
+    Components.BorderlessWindow {
+        id: grabWindow
+
+        width: 1
+        height: 1
+    }
+
+    TaskManager.ApplicationsModel {
+        id: appsModel
     }
 
     WaylandClient.LiriShell {
-        id: shell
+        id: liriShell
+
+        property bool isReady: false
 
         onActiveChanged: {
             if (active) {
@@ -43,20 +113,143 @@ Item {
                 grabWindow.visible = true;
             }
         }
+        onShutdownRequested: {
+            if (!lockScreen.opened)
+                shutdownDialog.open();
+        }
     }
+
+    onRefCountChanged: {
+        if (liriShell.active && refCount == 0) {
+            liriShell.sendReady();
+            liriShell.isReady = true;
+        }
+    }
+
+    /*
+     * PolicyKit
+     */
+
+    PolicyKit.PolicyKitAgent {
+        id: policyKitAgent
+
+        onAuthenticationInitiated: {
+            console.warn("Authentication initiated for", actionId);
+            authDialog.message = message;
+            authDialog.realName = realName;
+        }
+        onAuthenticationRequested: {
+            console.warn("Authentication requested:", prompt);
+            authDialog.prompt = prompt;
+            authDialog.echo = echo;
+            authDialog.open();
+        }
+        onInformation: {
+            authDialog.information = message;
+        }
+        onError: {
+            authDialog.error = message;
+        }
+        onAuthorizationFailed: {
+            authDialog.error = qsTr("Sorry, that didn't work. Please try again.");
+        }
+        onAuthenticationCanceled: {
+            authDialog.close();
+        }
+        onAuthenticationFinished: {
+            authDialog.close();
+        }
+        onAuthorizationGained: {
+            authDialog.close();
+        }
+        onAuthorizationCanceled: {
+            authDialog.close();
+        }
+
+        Component.onCompleted: {
+            registerAgent();
+        }
+    }
+
+    /*
+     * Layers
+     */
 
     WaylandClient.WlrLayerShellV1 {
         id: layerShell
     }
 
-    Osd {}
+    Instantiator {
+        id: modalOverlayInstantiator
 
-    BaseWindow {
-        id: grabWindow
+        active: liriShell.isReady
+        asynchronous: true
+        model: Qt.application.screens
 
-        width: 1
-        height: 1
+        ModalOverlayWindow {
+            screen: Qt.application.screens[index]
+        }
+
+        function setVisible(visible, ignoredScreen) {
+            for (var i = 0; i < count; i++) {
+                if (ignoredScreen && objectAt(i).screen.name === ignoredScreen.name)
+                    continue;
+                objectAt(i).visible = visible;
+            }
+        }
     }
 
-    Background {}
+    Osd {}
+
+    BackgroundWindow {}
+
+    PanelWindow {
+        id: panelWindow
+    }
+
+    IndicatorsWindow {
+        id: indicatorsWindow
+    }
+
+    Notifications.NotificationsManager {}
+
+    LockScreenWindow {
+        id: lockScreen
+    }
+
+    // Dialogs
+
+    Dialogs.AuthDialog {
+        id: authDialog
+    }
+
+    Launcher.AppsDialog {
+        id: appsDialog
+    }
+
+    Dialogs.RunDialog {
+        id: runDialog
+    }
+
+    Dialogs.LogoutDialog {
+        id: logoutDialog
+    }
+
+    Dialogs.ShutdownDialog {
+        id: shutdownDialog
+    }
+
+    /*
+     * Methods
+     */
+
+    function determinePrimaryScreen() {
+        for (var i = 0; i < Qt.application.screens.length; i++) {
+            var screen = Qt.application.screens[i];
+            if (screen.name === screenSettings.primary)
+                return screen;
+        }
+
+        return null;
+    }
 }

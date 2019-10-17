@@ -25,6 +25,7 @@ import QtQuick 2.0
 import QtQuick.Controls 2.0
 import QtQuick.Controls.Material 2.0
 import Fluid.Controls 1.0 as FluidControls
+import Liri.WaylandServer 1.0 as WS
 import Liri.private.shell 1.0 as P
 
 P.HotSpot {
@@ -161,6 +162,16 @@ P.HotSpot {
         radius: width / 2
         color: Material.accent
         opacity: parent.hovered ? 1.0 : 0.0
+        visible: opacity > 0.0
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: true
+            onPositionChanged: {
+                shellHelper.grabCursor(WS.LiriShell.ArrowGrabCursor);
+            }
+        }
 
         Behavior on opacity {
             NumberAnimation {

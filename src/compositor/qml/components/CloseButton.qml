@@ -27,6 +27,7 @@
 import QtQuick 2.0
 import QtQuick.Controls.Material 2.0
 import Fluid.Controls 1.0 as FluidControls
+import Liri.WaylandServer 1.0 as WS
 
 Rectangle {
     id: root
@@ -56,6 +57,9 @@ Rectangle {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
+        onPositionChanged: {
+            shellHelper.grabCursor(WS.LiriShell.ArrowGrabCursor);
+        }
         onClicked: root.clicked()
     }
 }

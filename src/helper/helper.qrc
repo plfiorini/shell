@@ -1,9 +1,51 @@
 <RCC>
     <qresource prefix="/">
-        <file>qml/Background.qml</file>
-        <file>qml/BaseWindow.qml</file>
+        <file>qml/BackgroundWindow.qml</file>
+        <file>qml/IndicatorsWindow.qml</file>
+        <file>qml/KeyBindings.qml</file>
+        <file>qml/LockScreenWindow.qml</file>
         <file>qml/main.qml</file>
-        <file>qml/OsdWindow.qml</file>
+        <file>qml/ModalOverlayWindow.qml</file>
         <file>qml/Osd.qml</file>
+        <file>qml/OsdWindow.qml</file>
+        <file>qml/PanelWindow.qml</file>
+        <file>qml/components/BorderlessWindow.qml</file>
+        <file>qml/components/PopupBehavior.qml</file>
+        <file>qml/components/PopupMenu.qml</file>
+        <file>qml/components/PopupWindow.qml</file>
+        <file>qml/components/ModalWindow.qml</file>
+        <file>qml/components/UiWindow.qml</file>
+        <file>qml/dialogs/AuthDialog.qml</file>
+        <file>qml/dialogs/LogoutDialog.qml</file>
+        <file>qml/dialogs/RunDialog.qml</file>
+        <file>qml/dialogs/ShutdownDialog.qml</file>
+        <file>qml/images/disk.svg</file>
+        <file>qml/images/eject.svg</file>
+        <file>qml/images/harddisk.svg</file>
+        <file>qml/images/hibernate.svg</file>
+        <file>qml/images/logout.svg</file>
+        <file>qml/images/reload.svg</file>
+        <file>qml/images/sleep.svg</file>
+        <file>qml/ui/launcher/AppDelegate.qml</file>
+        <file>qml/ui/launcher/AppsDialog.qml</file>
+        <file>qml/ui/launcher/AppsGridView.qml</file>
+        <file>qml/ui/launcher/Categories.qml</file>
+        <file>qml/ui/launcher/FrequentAppsView.qml</file>
+        <file>qml/ui/launcher/Launcher.qml</file>
+        <file>qml/ui/launcher/PagedGrid.qml</file>
+        <file>qml/ui/launcher/ShutdownButtons.qml</file>
+        <file>qml/ui/notifications/NotificationsManager.qml</file>
+        <file>qml/ui/notifications/NotificationWindow.qml</file>
+        <file>qml/ui/taskbar/Dot.qml</file>
+        <file>qml/ui/taskbar/LauncherButton.qml</file>
+        <file>qml/ui/taskbar/LauncherIcon.qml</file>
+        <file>qml/ui/taskbar/TaskBar.qml</file>
+        <file>qml/ui/taskbar/TaskDelegate.qml</file>
+        <file>qml/ui/taskbar/TaskMenu.qml</file>
+        <file>qml/ui/panel/IndicatorsRow.qml</file>
+        <file>qml/ui/panel/Panel.qml</file>
+        <file>qml/ui/panel/Tray.qml</file>
+        <file>qml/ui/panel/SettingsIndicator.qml</file>
+        <file>qml/ui/panel/StorageIndicator.qml</file>
     </qresource>
 </RCC>

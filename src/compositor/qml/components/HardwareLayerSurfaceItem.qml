@@ -29,5 +29,7 @@ LayerSurfaceItem {
 
     WaylandHardwareLayer {
         id: hwLayer
+
+        stackingLevel: 0
     }
 }

@@ -32,14 +32,18 @@
 #include <QQmlContext>
 #include <QQmlExtensionPlugin>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QtPlugin>
 #include <QtWaylandCompositor/QWaylandCompositor>
 
 #include "application.h"
-#include "sessionmanager/sessionmanager.h"
 
 #include <unistd.h>
 #include <sys/types.h>
+
+#ifdef HAVE_SYSTEMD
+#  include <systemd/sd-daemon.h>
+#endif
 
 Q_IMPORT_PLUGIN(ShellPrivatePlugin)
 
@@ -84,9 +88,6 @@ Application::Application(QObject *parent)
     connect(m_appEngine, &QQmlApplicationEngine::objectCreated,
             this, &Application::objectCreated);
 
-    // Session manager
-    m_sessionManager = new SessionManager(this);
-
     // Invoke shutdown sequence when quitting
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
             this, &Application::shutdown);
@@ -105,6 +106,20 @@ void Application::setScreenConfigurationFileName(const QString &fileName)
 void Application::setUrl(const QUrl &url)
 {
     m_url = url;
+}
+
+void Application::registerService()
+{
+    // Register the service
+    if (!QDBusConnection::sessionBus().registerService(QStringLiteral("io.liri.Shell"))) {
+        qWarning("Failed to register D-Bus service io.liri.Shell");
+        return;
+    }
+
+    // Notify systemd that the compositor is ready
+#ifdef HAVE_SYSTEMD
+    sd_notify(0, "READY=1");
+#endif
 }
 
 void Application::customEvent(QEvent *event)
@@ -159,13 +174,30 @@ void Application::startup()
     // Check whether XDG_RUNTIME_DIR is ok or not
     verifyXdgRuntimeDir();
 
+#ifdef HAVE_SYSTEMD
+    uint64_t interval = 0;
+    if (sd_watchdog_enabled(0, &interval) > 0) {
+        if (interval > 0) {
+            // Start a keep-alive timer every half of the watchdog interval,
+            // and convert it from microseconds to milliseconds
+            std::chrono::microseconds us(interval / 2);
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(us);
+            auto *timer = new QTimer(this);
+            timer->setInterval(ms);
+            connect(timer, &QTimer::timeout, this, [] {
+                sd_notify(0, "WATCHDOG=1");
+            });
+            timer->start();
+        }
+    }
+#endif
+
+    // Register this object
+    m_appEngine->rootContext()->setContextProperty(QStringLiteral("ShellCpp"), this);
+
     // Set screen configuration file name
     m_appEngine->rootContext()->setContextProperty(QStringLiteral("screenConfigurationFileName"),
                                                    m_screenConfigFileName);
-
-    // Session interface
-    m_appEngine->rootContext()->setContextProperty(QStringLiteral("SessionInterface"),
-                                                   m_sessionManager);
 
     // Load the compositor
     m_appEngine->load(m_url);
@@ -175,11 +207,17 @@ void Application::startup()
 
 void Application::shutdown()
 {
+    // Notify systemd that we are quitting
+#ifdef HAVE_SYSTEMD
+    sd_notify(0, "STOPPING=1");
+#endif
+
+    // Unregister D-Bus service
+    QDBusConnection::sessionBus().unregisterService(QStringLiteral("io.liri.Shell"));
+
+    // Unload the engine
     m_appEngine->deleteLater();
     m_appEngine = nullptr;
-
-    m_sessionManager->deleteLater();
-    m_sessionManager = nullptr;
 }
 
 void Application::objectCreated(QObject *object, const QUrl &)

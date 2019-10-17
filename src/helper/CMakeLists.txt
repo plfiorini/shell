@@ -5,8 +5,10 @@ if(LIRI_ENABLE_SYSTEMD)
     find_package(Libsystemd REQUIRED)
 endif()
 
-if(NOT TARGET Liri::WaylandClient)
-    find_package(Liri1WaylandClient REQUIRED)
+find_package(PAM REQUIRED)
+
+if(NOT TARGET Liri::Qt5GSettings)
+    find_package(Qt5GSettings REQUIRED)
 endif()
 
 include(LiriCreateGitHeadRevisionFile)
@@ -17,6 +19,12 @@ liri_add_executable(LiriShellHelper
         "liri-shell-helper"
     SOURCES
         main.cpp
+        authenticator/authenticator.cpp
+        authenticator/authenticator.h
+        authenticator/qmlauthenticator.cpp
+        authenticator/qmlauthenticator.h
+        indicators/indicatorsmodel.cpp
+        indicators/indicatorsmodel.h
     RESOURCES
         "helper.qrc"
     DEFINES
@@ -27,11 +35,12 @@ liri_add_executable(LiriShellHelper
         "${INSTALL_LIBEXECDIR}"
     LIBRARIES
         Qt5::Core
+        Qt5::Sql
         Qt5::Gui
         Qt5::GuiPrivate
         Qt5::Qml
-        Qt5::WaylandClient
-        Liri::WaylandClient
+        Liri::Qt5GSettings
+        ${PAM_LIBRARIES}
 )
 
 liri_extend_target("LiriShellHelper"

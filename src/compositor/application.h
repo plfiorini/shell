@@ -46,13 +46,14 @@ public:
 
     void setUrl(const QUrl &url);
 
+    Q_INVOKABLE void registerService();
+
 protected:
     void customEvent(QEvent *event) override;
 
 private:
     QUrl m_url;
     QQmlApplicationEngine *m_appEngine;
-    SessionManager *m_sessionManager;
     bool m_failSafe;
     bool m_started;
     QString m_screenConfigFileName;

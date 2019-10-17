@@ -23,6 +23,7 @@
 
 import QtQuick 2.0
 import QtWayland.Compositor 1.0
+import Liri.Session 1.0 as Session
 import Liri.XWayland 1.0 as LXW
 import "windows"
 
@@ -45,7 +46,7 @@ LXW.XWayland {
     onServerStarted: {
         console.debug("Xwayland server started");
 
-        SessionInterface.setEnvironment("DISPLAY", displayName);
+        Session.SessionManager.setEnvironment("DISPLAY", displayName);
     }
 
     Component {

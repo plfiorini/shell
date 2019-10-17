@@ -22,13 +22,20 @@
  * $END_LICENSE$
  ***************************************************************************/
 
-import QtQuick 2.5
-import QtQuick.Window 2.3
+import QtQml.Models 2.1
+import QtQuick 2.10
+import QtQuick.Window 2.10
 import QtQuick.Controls 2.0
+import QtQuick.Controls.Material 2.0
 import QtWayland.Compositor 1.0
+import Liri.Session 1.0 as Session
+import Liri.WaylandServer 1.0 as WS
 import Liri.Shell 1.0 as LiriShell
 import Liri.private.shell 1.0 as P
-import "desktop"
+import Fluid.Controls 1.0 as FluidControls
+import "components" as Components
+import "desktop" as Desktop
+import "screens" as Screens
 
 P.WaylandOutput {
     id: output
@@ -41,10 +48,28 @@ P.WaylandOutput {
 
     property int idleInhibit: 0
 
-    readonly property alias screenView: screenView
-    readonly property Item surfacesArea: screenView.surfacesArea
+    readonly property alias splash: splash
+    readonly property alias hotCorners: hotCorners
+    readonly property alias desktop: desktop
+    readonly property alias surfacesArea: desktop.currentWorkspace
     //readonly property alias idleDimmer: idleDimmer
     readonly property alias cursor: cursor
+
+    readonly property var layers: QtObject {
+        readonly property alias background: desktop.backgroundLayer
+        readonly property alias bottom: bottomLayer
+        readonly property alias top: topLayer
+        readonly property alias lockScreen: lockScreenLayer
+        readonly property alias overlay: overlayLayer
+        readonly property alias modalOverlay: modalOverlayLayer
+        readonly property alias notifications: notificationsLayer
+        readonly property alias fullScreen: fullScreenLayer
+    }
+
+    property bool locked: false
+
+    readonly property alias showFps: fpsIndicator.visible
+    readonly property alias showInformation: outputInfo.visible
 
     property var exportDmabufFrame: null
 
@@ -61,6 +86,17 @@ P.WaylandOutput {
         }
     }
 
+    Connections {
+        target: Session.SessionManager
+
+        function onSessionLocked() {
+            // FIXME: Before suspend we lock the screen, but turning the output off has a side effect:
+            // when the system is resumed it won't flip so we comment this out but unfortunately
+            // it means that the lock screen will not turn off the screen
+            //output.idle();
+        }
+    }
+
     Component.onCompleted: {
         if (output.screen) {
             for (var i = 0; i < output.screen.modes.length; i++) {
@@ -74,8 +110,12 @@ P.WaylandOutput {
         }
     }
 
-    window: ApplicationWindow {
+    window: Window {
         id: outputWindow
+
+        Material.theme: Material.Dark
+        Material.primary: Material.Blue
+        Material.accent: Material.Blue
 
         x: output.position.x
         y: output.position.y
@@ -83,19 +123,8 @@ P.WaylandOutput {
         height: output.geometry.height
         flags: Qt.Window | Qt.FramelessWindowHint
         screen: output.screen ? Qt.application.screens[output.screen.screenIndex] : null
-        color: "black"
-        visible: true
-
-        // Virtual Keyboard
-        Loader {
-            parent: outputWindow.overlay
-            active: liriCompositor.settings.ui.inputMethod === "qtvirtualkeyboard"
-            source: Qt.resolvedUrl("base/Keyboard.qml")
-            x: (parent.width - width) / 2
-            y: parent.height - height
-            z: 999
-            width: Math.max(parent.width / 2, 768)
-        }
+        color: Material.color(Material.Grey, Material.Shade700)
+        visible: output.screen.enabled
 
         // Keyboard handling
         P.KeyEventFilter {
@@ -103,24 +132,37 @@ P.WaylandOutput {
                 // Input wakes the output
                 liriCompositor.wake();
 
-                screenView.handleKeyPressed(event);
+                // Power off and suspend
+                switch (event.key) {
+                case Qt.Key_PowerOff:
+                case Qt.Key_PowerDown:
+                case Qt.Key_Suspend:
+                case Qt.Key_Hibernate:
+                    shellHelper.requestShutdown();
+                    event.accepted = true;
+                    return;
+                default:
+                    break;
+                }
+
+                desktop.handleKeyPressed(event);
             }
 
             Keys.onReleased: {
                 // Input wakes the output
                 liriCompositor.wake();
 
-                screenView.handleKeyReleased(event);
+                desktop.handleKeyReleased(event);
             }
         }
 
         // Mouse tracker
-        P.WindowMouseTracker {
+        WaylandMouseTracker {
             id: mouseTracker
 
             anchors.fill: parent
 
-            windowSystemCursorEnabled: false
+            windowSystemCursorEnabled: cursor.visible
 
             onMouseXChanged: {
                 // Wake up
@@ -138,13 +180,184 @@ P.WaylandOutput {
             }
             // TODO: Need to wake up with mouse button pressed, released and wheel
 
-            // User interface
-            ScreenView {
-                id: screenView
+            // This is needed so the grab surface will receive pointer events
+            WaylandQuickItem {
+                surface: shellHelper.grabSurface
+                focusOnClick: false
+                touchEventsEnabled: false
+                sizeFollowsSurface: true
 
-                objectName: "screenView"
+                onSurfaceDestroyed: {
+                    destroy();
+                }
+            }
+
+            // Grab cursor when the pointer is over the window background
+            MouseArea {
                 anchors.fill: parent
-                visible: output.screen.enabled
+                acceptedButtons: Qt.NoButton
+                hoverEnabled: true
+                onPositionChanged: {
+                    shellHelper.grabCursor(WS.LiriShell.ArrowGrabCursor);
+                }
+            }
+
+            // Bottom
+            Item {
+                id: bottomLayer
+
+                anchors.fill: parent
+            }
+
+            // Workspace
+            Item {
+                anchors.fill: parent
+
+                Desktop.Desktop {
+                    id: desktop
+
+                    anchors.fill: parent
+                    objectName: "desktop"
+
+                    transform: Scale {
+                        id: screenScaler
+
+                        origin.x: zoomArea.x2
+                        origin.y: zoomArea.y2
+                        xScale: zoomArea.zoom2
+                        yScale: zoomArea.zoom2
+                    }
+
+                    Desktop.ScreenZoom {
+                        id: zoomArea
+
+                        anchors.fill: parent
+                        scaler: screenScaler
+                        enabled: false
+                    }
+                }
+            }
+
+            // Virtual Keyboard
+            Loader {
+                active: liriCompositor.settings.ui.inputMethod === "qtvirtualkeyboard"
+                source: Qt.resolvedUrl("base/Keyboard.qml")
+                x: (parent.width - width) / 2
+                y: parent.height - height
+                width: Math.max(parent.width / 2, 768)
+            }
+
+            // Top
+            Item {
+                id: topLayer
+
+                anchors.fill: parent
+
+                // Lock screen
+                Item {
+                    id: lockScreenLayer
+
+                    anchors.fill: parent
+                    z: 1
+                }
+
+                // Hot corners
+                Item {
+                    id: hotCorners
+
+                    anchors.fill: parent
+                    z: 10
+
+                    // Top-left corner
+                    Components.HotCorner {
+                        corner: Qt.TopLeftCorner
+                    }
+
+                    // Top-right corner
+                    Components.HotCorner {
+                        corner: Qt.TopRightCorner
+                    }
+
+                    // Bottom-left corner
+                    Components.HotCorner {
+                        corner: Qt.BottomLeftCorner
+                        onTriggered: {
+                            if (desktop.currentWorkspace.state == "normal")
+                                desktop.currentWorkspace.state = "present";
+                            else
+                                desktop.currentWorkspace.state = "normal";
+                        }
+                    }
+
+                    // Bottom-right corner
+                    Components.HotCorner {
+                        corner: Qt.BottomRightCorner
+                    }
+                }
+            }
+
+            // Notifications
+            Item {
+                id: notificationsLayer
+
+                readonly property real spacing: FluidControls.Units.smallSpacing
+                readonly property real padding: FluidControls.Units.smallSpacing * 3
+
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.topMargin: output.availableGeometry.y
+                anchors.bottomMargin: output.geometry.height - output.availableGeometry.height
+                anchors.rightMargin: output.geometry.width - output.availableGeometry.width
+                width: FluidControls.Units.gu(24) + (padding * 2)
+            }
+
+            // Full screen windows can cover application windows and panels
+            Rectangle {
+                id: fullScreenLayer
+
+                anchors.fill: parent
+                color: "black"
+                opacity: children.length > 0 ? 1.0 : 0.0
+                visible: opacity > 0.0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        easing.type: Easing.InSine
+                        duration: FluidControls.Units.mediumDuration
+                    }
+                }
+            }
+
+            // Modal overlay
+            Item {
+                id: modalOverlayLayer
+
+                anchors.fill: parent
+            }
+
+            // Overlays
+            Item {
+                id: overlayLayer
+
+                anchors.fill: parent
+            }
+
+            // Splash screen
+            Screens.SplashScreen {
+                id: splash
+
+                anchors.fill: parent
+
+                // Hide anyway after a while, in case shell helper died before
+                // emitting the "ready" signal
+                Timer {
+                    running: true
+                    interval: 15000
+                    onTriggered: {
+                        splash.hide();
+                    }
+                }
             }
 
             // Flash for screenshots
@@ -176,15 +389,44 @@ P.WaylandOutput {
                 }
             }
 
+            // FPS indicator
+            Text {
+                id: fpsIndicator
+
+                anchors {
+                    top: parent.top
+                    right: parent.right
+                }
+                text: fpsCounter.framesPerSecond.toFixed(2)
+                font.pointSize: 36
+                style: Text.Raised
+                styleColor: "#222"
+                color: "white"
+                visible: false
+
+                P.FpsCounter {
+                    id: fpsCounter
+                }
+            }
+
+            // Output information
+            Screens.OutputInfo {
+                id: outputInfo
+
+                anchors {
+                    left: parent.left
+                    top: parent.top
+                }
+                visible: false
+            }
+
             // Idle dimmer
-            IdleDimmer {
+            Desktop.IdleDimmer {
                 id: idleDimmer
 
                 anchors.fill: parent
 
                 output: output
-
-                z: 1000002
             }
         }
 
@@ -192,16 +434,12 @@ P.WaylandOutput {
         WaylandCursorItem {
             id: cursor
 
-            parent: mouseTracker.parent
-            seat: liriCompositor.defaultSeat
+            seat: output.compositor.defaultSeat
 
             x: mouseTracker.mouseX
             y: mouseTracker.mouseY
-            z: 1000001
 
-            visible: mouseTracker.containsMouse &&
-                     !mouseTracker.windowSystemCursorEnabled &&
-                     screenView.cursorVisible
+            visible: surface !== null && mouseTracker.containsMouse
         }
     }
 

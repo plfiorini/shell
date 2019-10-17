@@ -29,6 +29,7 @@ import QtGraphicalEffects 1.0
 import QtQuick.Controls 2.0
 import QtQuick.Controls.Material 2.0
 import Fluid.Controls 1.0 as FluidControls
+import Liri.WaylandServer 1.0 as WS
 import "../components" as ShellComponents
 
 Item {
@@ -54,6 +55,9 @@ Item {
         acceptedButtons: Qt.AllButtons
         hoverEnabled: true
         z: 4
+        onPositionChanged: {
+            shellHelper.grabCursor(WS.LiriShell.ArrowGrabCursor);
+        }
         onClicked: chrome.selected(view)
     }
 

@@ -151,24 +151,19 @@ LS.WaylandWindow {
 
         function onActivatedChanged() {
             if (d.registered && shellSurface.activated && shellSurface.windowType !== Qt.Popup)
-                applicationManager.focusShellSurface(window);
-        }
-        function onSurfaceChanged() {
-            // Surface is changed, which means that app id has likely changed too
-            window.appId = applicationManager.canonicalizeAppId(shellSurface.appId);
+                liriCompositor.activeShellSurface = window;
         }
         function onAppIdChanged() {
-            // Canonicalize app id and cache it, so that it's known even during destruction
-            window.appId = applicationManager.canonicalizeAppId(shellSurface.appId);
+            // Cache app id, so that it's known even during destruction
+            window.appId = shellSurface.appId;
 
             if (!d.registered && window.appId) {
                 // Register application
-                applicationManager.registerShellSurface(window);
                 d.registered = true;
 
                 // Focus icon in the panel
                 if (d.activated)
-                    applicationManager.focusShellSurface(window);
+                    liriCompositor.activeShellSurface = window;
             }
         }
         function onMapped() {

@@ -26,6 +26,8 @@
 #include <QQmlApplicationEngine>
 
 #include "gitsha1.h"
+#include "authenticator/qmlauthenticator.h"
+#include "indicators/indicatorsmodel.h"
 
 #if HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -106,13 +108,23 @@ int main(int argc, char *argv[])
 
     // Print version information
     qInfo("== Liri Shell Helper v%s ==\n"
-          "** http://liri.io\n"
+          "** https://liri.io\n"
           "** Bug reports to: https://github.com/lirios/shell/issues\n"
           "** Build: %s-%s",
           LIRISHELL_VERSION, LIRISHELL_VERSION, GIT_REV);
 
     // Setup systemd
     setupSystemd();
+
+    // Register QML types
+    {
+        const char *uri = "Liri.ShellHelper";
+        const int versionMajor = 1;
+        const int versionMinor = 0;
+
+        qmlRegisterType<QmlAuthenticator>(uri, versionMajor, versionMinor, "Authenticator");
+        qmlRegisterType<IndicatorsModel>(uri, versionMajor, versionMinor, "IndicatorsModel");
+    }
 
     // Create UI
     QSharedPointer<QQmlApplicationEngine> engine(new QQmlApplicationEngine);

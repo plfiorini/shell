@@ -33,14 +33,9 @@ import "../panel"
 Item {
     id: shell
 
-    readonly property alias panel: panel
     readonly property alias indicator: rightDrawer.indicator
 
-    Panel {
-        id: panel
-
-        onIndicatorTriggered: rightDrawer.indicator = indicator
-    }
+        //onIndicatorTriggered: rightDrawer.indicator = indicator
 
     Drawer {
         id: rightDrawer
@@ -62,7 +57,7 @@ Item {
 
         edge: Qt.RightEdge
 
-        width: Math.max(356, panel.rightWidth)
+//        width: Math.max(356, panel.rightWidth)
         height: shell.height
 
         Item {

@@ -26,6 +26,7 @@
 
 import QtQuick 2.5
 import QtGSettings 1.0 as Settings
+import Liri.Shell 1.0 as LS
 
 Item {
     /*
@@ -61,7 +62,7 @@ Item {
 
         function switchToWorkspace(number) {
             for (var i = 0; i < liriCompositor.screenManager.count; i++)
-                liriCompositor.screenManager.objectAt(i).screenView.desktop.selectWorkspace(number);
+                liriCompositor.screenManager.objectAt(i).desktop.selectWorkspace(number);
         }
     }
 
@@ -78,7 +79,7 @@ Item {
             showInformation = !showInformation;
 
             for (var i = 0; i < liriCompositor.screenManager.count; i++)
-                liriCompositor.screenManager.objectAt(i).screenView.showInformation = showInformation;
+                liriCompositor.screenManager.objectAt(i).showInformation = showInformation;
         }
     }
 
@@ -163,7 +164,7 @@ Item {
         sequence: wmKeybindings.switchToWorkspaceLeft
         onActivated: {
             for (var i = 0; i < liriCompositor.screenManager.count; i++)
-                liriCompositor.screenManager.objectAt(i).screenView.desktop.selectPreviousWorkspace();
+                liriCompositor.screenManager.objectAt(i).desktop.selectPreviousWorkspace();
         }
     }
 
@@ -172,7 +173,7 @@ Item {
         sequence: wmKeybindings.switchToWorkspaceRight
         onActivated: {
             for (var i = 0; i < liriCompositor.screenManager.count; i++)
-                liriCompositor.screenManager.objectAt(i).screenView.desktop.selectNextWorkspace();
+                liriCompositor.screenManager.objectAt(i).desktop.selectNextWorkspace();
         }
     }
 
@@ -227,7 +228,7 @@ Item {
         onActivated: {
             var workspace;
             for (var i = 0; i < liriCompositor.screenManager.count; i++) {
-                workspace = liriCompositor.objectAt(i).screenView.surfacesArea;
+                workspace = liriCompositor.objectAt(i).surfacesArea;
                 if (workspace.state === "present")
                     workspace.state = "normal";
                 else if (workspace.state === "normal")
@@ -239,10 +240,6 @@ Item {
     Shortcut {
         context: Qt.ApplicationShortcut
         sequence: wmKeybindings.mainMenu
-        onActivated: {
-            var panel = liriCompositor.defaultOutput.screenView.desktop.panel
-            panel.launcherIndicator.clicked(null)
-        }
     }
 
     Shortcut {
@@ -500,32 +497,14 @@ Item {
         onActivated: liriCompositor.quit()
     }
 
-    Shortcut {
-        context: Qt.ApplicationShortcut
-        sequence: smKeybindings.powerOff
-        onActivated: liriCompositor.defaultOutput.screenView.showPowerOff()
-    }
-
-    Shortcut {
-        context: Qt.ApplicationShortcut
-        sequence: smKeybindings.lockScreen
-        onActivated: SessionInterface.lock()
-    }
-
     /*
      * Desktop
      */
 
     Shortcut {
         context: Qt.ApplicationShortcut
-        sequence: desktopKeybindings.runCommand
-        onActivated: liriCompositor.defaultOutput.screenView.runCommand.open()
-    }
-
-    Shortcut {
-        context: Qt.ApplicationShortcut
         sequence: desktopKeybindings.screenshot
-        onActivated: SessionInterface.launchApplication("io.liri.Screenshot")
+        onActivated: LS.Launcher.launchApplication("io.liri.Screenshot")
     }
 
     Shortcut {

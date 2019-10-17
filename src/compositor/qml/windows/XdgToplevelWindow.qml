@@ -69,6 +69,10 @@ LS.WaylandWindow {
         return rect;
     }
 
+    readonly property alias taskBarSurface: toplevelHandle.rectangleSurface
+    readonly property rect taskBarEntryGeometry: Qt.rect(toplevelHandle.rectangleX, toplevelHandle.rectangleY,
+                                                         toplevelHandle.rectangleWidth, toplevelHandle.rectangleHeight)
+
     readonly property size minSize: toplevel ? toplevel.minSize : Qt.size(0, 0)
     readonly property size maxSize: toplevel ? toplevel.maxSize : Qt.size(0, 0)
 
@@ -187,20 +191,19 @@ LS.WaylandWindow {
 
         function onActivatedChanged() {
             if (d.registered && toplevel.activated)
-                applicationManager.focusShellSurface(window);
+                liriCompositor.activeShellSurface = window;
         }
         function onAppIdChanged() {
-            // Canonicalize app id and cache it, so that it's known even during destruction
-            window.appId = applicationManager.canonicalizeAppId(toplevel.appId);
+            // Cache app id, so that it's known even during destruction
+            window.appId = toplevel.appId;
 
             if (!d.registered && window.appId) {
                 // Register application
-                applicationManager.registerShellSurface(window);
                 d.registered = true;
 
                 // Focus icon in the panel
                 if (toplevel.activated)
-                    applicationManager.focusShellSurface(window);
+                    liriCompositor.activeShellSurface = window;
             }
         }
         function onStartMove(seat) {
